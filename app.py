@@ -8,9 +8,9 @@ from PIL import Image
 BASE = Path(__file__).parent
 DATA = BASE / "data"
 SCANS = DATA / "scans"
-MODEL = BASE / "models" / "plantguard_model.keras"
-LABELS = BASE / "models" / "labels.json"
-REPORT = BASE / "models" / "training_report.json"
+MODEL = BASE / "model" / "plantguard_best.keras"
+LABELS = BASE / "model" / "class_names.json"
+REPORT = BASE / "model" / "training_report.json"
 for p in [SCANS, DATA / "history", MODEL.parent]: p.mkdir(parents=True, exist_ok=True)
 
 st.set_page_config(page_title="PlantGuard AI", page_icon="🌿", layout="wide")
@@ -55,18 +55,52 @@ def load_model():
         return None, {"error":str(e)}
 
 def classify(img):
-    model, labels=load_model()
-    if model is None:
-        return None, ("Model files exist but could not load: "+labels["error"]) if labels and "error" in labels else "The website is ready, but the trained classifier has not been added yet. Train it in Google Colab, then upload the exported model files."
-    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-    x=np.asarray(img.convert("RGB").resize((224,224)),dtype=np.float32)
-    probs=model.predict(preprocess_input(x[None,...]),verbose=0)[0]
-    i=int(np.argmax(probs)); label=labels[i] if isinstance(labels,list) else labels[str(i)]
-    plant,disease=label.split("___",1) if "___" in label else (label,"Unknown condition")
-    return {"plant":plant.replace("_"," "),"disease":disease.replace("_"," "),
-            "status":"Healthy" if "healthy" in disease.lower() else "Possible disease detected",
-            "confidence":float(probs[i])}, None
+    model, labels = load_model()
 
+    if model is None:
+        error = (
+            "Model loading failed: " + labels["error"]
+            if labels and "error" in labels
+            else "Trained model files are missing."
+        )
+        return None, error
+
+    # Convert image to RGB and resize
+    img = img.convert("RGB").resize((224, 224))
+
+    # Convert image to an array (0–255)
+    x = np.asarray(img, dtype=np.float32)
+
+    # Add batch dimension
+    x = np.expand_dims(x, axis=0)
+
+    # Predict
+    probs = model.predict(x, verbose=0)[0]
+
+    # Get highest probability
+    i = int(np.argmax(probs))
+    label = labels[i]
+
+    # Separate plant and disease
+    plant, disease = label.split("___", 1)
+
+    plant = plant.replace("_", " ").replace(",", "")
+    disease = disease.replace("_", " ").strip()
+
+    # Determine health status
+    status = (
+        "Healthy"
+        if "healthy" in disease.lower()
+        else "Possible disease detected"
+    )
+
+    return {
+        "plant": plant,
+        "disease": disease,
+        "status": status,
+        "confidence": float(probs[i])
+    }, None
+    
 def save(img,result):
     sid=str(uuid.uuid4()); path=SCANS/f"{sid}.jpg"
     img.convert("RGB").save(path,"JPEG",quality=88)
@@ -84,7 +118,11 @@ with st.sidebar:
     page=st.radio("NAVIGATION",["Dashboard","Plant Scanner","Scan History","Model Insights"])
     st.divider()
     st.markdown("🟢 Website ready  \n🟢 Camera & upload  \n🟢 Local history")
-    st.markdown("🟢 Model connected" if MODEL.exists() else "🟡 Model awaiting training")
+    st.markdown(
+    "🟢 Model connected"
+    if MODEL.exists() and LABELS.exists()
+    else "🟡 Model files missing"
+)
 
 if page=="Dashboard":
     st.markdown('<div class="hero"><div class="kicker">PLANT HEALTH, MADE SIMPLE</div><h1>A smarter way to care for your plants.</h1><p>Capture a leaf, identify its plant category and check its health with the PlantGuard AI image classifier.</p></div>',unsafe_allow_html=True)

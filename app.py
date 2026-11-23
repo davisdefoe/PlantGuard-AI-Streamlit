@@ -146,6 +146,10 @@ elif page=="Plant Scanner":
     with a: camera=st.camera_input("Take a plant photo")
     with b: upload=st.file_uploader("Or upload an image",type=["jpg","jpeg","png","webp"])
     chosen=camera if camera is not None else upload
+    st.info(
+    f"Upload check | Camera: {'Received' if camera is not None else 'Empty'} "
+    f"| File: {'Received' if upload is not None else 'Empty'}"
+)
     if chosen:
         img=Image.open(chosen).convert("RGB")
         st.image(img,caption="Selected image",use_container_width=True)
